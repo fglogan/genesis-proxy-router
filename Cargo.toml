@@ -1,0 +1,49 @@
+[package]
+name = "genesis-proxy-router"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/fglogan/genesis-proxy-router"
+description = "Transparent OpenAI-compatible proxy router + multi-network server discovery"
+readme = "README.md"
+keywords = ["openai", "proxy", "llm", "gateway", "ai"]
+categories = ["web-programming::http-server", "network-programming"]
+
+[features]
+default = ["discover", "proxy"]
+discover = []
+proxy = ["dep:axum", "dep:tower-http", "dep:async-stream"]
+
+# When used inside genesis-v2 monorepo, enable this for full integration
+genesis-server = ["dep:genesis-core", "dep:genesis-provider"]
+
+[dependencies]
+# Async
+tokio = { version = "1", features = ["full"] }
+futures-util = "0.3"
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Error handling
+anyhow = "1"
+
+# HTTP client (discovery probes)
+reqwest = { version = "0.12", features = ["json", "stream"] }
+
+# Server (proxy feature)
+axum = { version = "0.8", features = ["macros"], optional = true }
+tower-http = { version = "0.6", optional = true }
+async-stream = { version = "0.3", optional = true }
+
+# Genesis integration (genesis-server feature)
+genesis-core = { path = "../genesis-v2/crates/genesis-core", optional = true }
+genesis-provider = { path = "../genesis-v2/crates/genesis-provider", optional = true }
+
+# Logging
+tracing = "0.1"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["test-util", "macros"] }
