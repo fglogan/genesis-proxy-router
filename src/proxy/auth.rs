@@ -1,14 +1,14 @@
 //! Proxy authentication — bearer token validation and provider credential resolution.
 //!
 //! Clients authenticate to the proxy with a bearer token. The proxy maps
-//! this to provider credentials in the registry. This keeps provider API keys
+//! this to provider credentials in the registry. Provider API keys stay
 //! server-side — clients never see them.
 
 use axum::{
     extract::Request,
     http::StatusCode,
     middleware::Next,
-    response::{IntoResponse, Response},
+    response::{IntoResponse as _, Response},
 };
 use serde_json::json;
 use std::sync::Arc;
@@ -23,14 +23,9 @@ pub async fn require_proxy_auth(
     request: Request,
     next: Next,
 ) -> Response {
-    let state = request
-        .extensions()
-        .get::<Arc<ProxyState>>()
-        .cloned();
-
-    let state = match state {
-        Some(s) => s,
-        None => return next.run(request).await,
+    let state = request.extensions().get::<Arc<ProxyState>>().cloned();
+    let Some(state) = state else {
+        return next.run(request).await;
     };
 
     if !state.config.auth_required {
@@ -43,7 +38,10 @@ pub async fn require_proxy_auth(
         .and_then(|v| v.to_str().ok())
         .unwrap_or_default();
 
-    let token = auth_header.strip_prefix("Bearer ").unwrap_or_default().trim();
+    let token = auth_header
+        .strip_prefix("Bearer ")
+        .unwrap_or_default()
+        .trim();
 
     if token.is_empty() {
         return (
@@ -59,7 +57,6 @@ pub async fn require_proxy_auth(
             .into_response();
     }
 
-    // Validate against configured proxy token
     if let Some(ref expected) = state.config.proxy_token {
         if token != expected {
             return (

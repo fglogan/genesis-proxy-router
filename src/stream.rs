@@ -10,6 +10,7 @@ use std::pin::Pin;
 
 /// A chunk in an LLM response stream.
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub enum StreamChunk {
     /// Text content delta.
     TextDelta(String),
@@ -17,23 +18,33 @@ pub enum StreamChunk {
     ReasoningDelta(String),
     /// Tool call request (complete).
     ToolCall {
+        /// Tool call identifier.
         id: String,
+        /// Function name to invoke.
         name: String,
+        /// JSON-encoded arguments.
         arguments: String,
     },
     /// Token usage update.
     Usage(TokenUsage),
     /// Stream finished.
-    Finish { reason: String },
+    Finish {
+        /// Reason for completion (e.g., `"stop"`, `"length"`).
+        reason: String,
+    },
     /// Error from upstream provider.
     Error(String),
 }
 
 /// Token usage counts.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct TokenUsage {
+    /// Input/prompt tokens consumed.
     pub input: u64,
+    /// Output/completion tokens generated.
     pub output: u64,
+    /// Total tokens if reported by provider.
     pub total: Option<u64>,
 }
 
@@ -46,7 +57,7 @@ pub type ChunkStream = Pin<Box<dyn Stream<Item = StreamChunk> + Send>>;
 /// delegates to `genesis_provider::LlmProvider` implementations. When used
 /// standalone, implement this trait directly.
 pub trait LlmProvider: Send + Sync {
-    /// Provider identifier (e.g., "anthropic", "openai").
+    /// Provider identifier (e.g., `"anthropic"`, `"openai"`).
     fn id(&self) -> &str;
     /// Human-readable name.
     fn name(&self) -> &str;

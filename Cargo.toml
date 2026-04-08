@@ -1,3 +1,86 @@
+[workspace]
+members = ["src-tauri"]
+resolver = "2"
+
+# =============================================================================
+# RustGuard Workspace Lints
+# =============================================================================
+# Core safety lints — never override
+# Library hygiene lints — library crates inherit as-is
+# Pedantic noise lints — allow by default, opt in per-crate
+# Nursery — allow by default (don't deny as group)
+
+[workspace.lints.clippy]
+
+# ── Core safety (deny everywhere) ────────────────────────────────────────────
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+dbg_macro = "deny"
+todo = "deny"
+unimplemented = "deny"
+unreachable = "deny"
+redundant_clone = "deny"
+clone_on_copy = "deny"
+needless_borrow = "deny"
+wildcard_imports = "deny"
+indexing_slicing = "deny"
+explicit_deref_methods = "deny"
+manual_assert = "deny"
+print_stdout = "deny"
+print_stderr = "deny"
+
+# ── Library hygiene (allow by default — library crates inherit as-is) ─────────
+missing_inline_in_public_items = "allow"
+must_use_candidate = "allow"
+pub_without_shorthand = "allow"
+missing_const_for_fn = "allow"
+doc_markdown = "allow"
+implied_bounds_in_impls = "allow"
+
+# ── Pedantic noise (allow everywhere) ─────────────────────────────────────────
+shadow_reuse = "allow"
+shadow_unrelated = "allow"
+shadow_same = "allow"
+module_name_repetitions = "allow"
+question_mark_used = "allow"
+pub_use = "allow"
+implicit_return = "allow"
+fn_params_excessive_bools = "allow"
+struct_excessive_bools = "allow"
+multiple_crate_versions = "allow"
+absolute_paths = "allow"
+min_ident_chars = "allow"
+ref_patterns = "allow"
+pattern_type_mismatch = "allow"
+std_instead_of_core = "allow"
+std_instead_of_alloc = "allow"
+alloc_instead_of_core = "allow"
+single_call_fn = "allow"
+option_if_let_else = "allow"
+arbitrary_source_item_ordering = "allow"
+missing_trait_methods = "allow"
+impl_trait_in_params = "allow"
+redundant_pub_crate = "allow"
+needless_pass_by_ref_mut = "allow"
+iter_over_hash_type = "allow"
+mod_module_files = "allow"
+allow_attributes = "allow"
+allow_attributes_without_reason = "allow"
+missing_docs_in_private_items = "allow"
+missing_fields_in_debug = "allow"
+unseparated_literal_suffix = "allow"
+separated_literal_suffix = "allow"
+default_numeric_fallback = "allow"
+missing_panics_doc = "allow"
+unused_async = "allow"
+wildcard_enum_match_arm = "allow"
+
+# ── Nursery (allow — don't enable as group) ────────────────────────────────────
+nursery = "allow"
+pedantic = "allow"
+all = "allow"
+
 [package]
 name = "genesis-proxy-router"
 version = "0.1.0"
@@ -10,39 +93,28 @@ readme = "README.md"
 keywords = ["openai", "proxy", "llm", "gateway", "ai"]
 categories = ["web-programming::http-server", "network-programming"]
 
+[lints]
+workspace = true
+
 [features]
 default = ["discover", "proxy"]
 discover = []
 proxy = ["dep:axum", "dep:tower-http", "dep:async-stream"]
 
-# When used inside genesis-v2 monorepo, enable this for full integration
 genesis-server = ["dep:genesis-core", "dep:genesis-provider"]
 
 [dependencies]
-# Async
 tokio = { version = "1", features = ["full"] }
 futures-util = "0.3"
-
-# Serialization
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-
-# Error handling
 anyhow = "1"
-
-# HTTP client (discovery probes)
 reqwest = { version = "0.12", features = ["json", "stream"] }
-
-# Server (proxy feature)
 axum = { version = "0.8", features = ["macros"], optional = true }
 tower-http = { version = "0.6", optional = true }
 async-stream = { version = "0.3", optional = true }
-
-# Genesis integration (genesis-server feature)
 genesis-core = { path = "../genesis-v2/crates/genesis-core", optional = true }
 genesis-provider = { path = "../genesis-v2/crates/genesis-provider", optional = true }
-
-# Logging
 tracing = "0.1"
 
 [dev-dependencies]

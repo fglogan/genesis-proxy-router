@@ -9,10 +9,9 @@ use tokio::time::Duration;
 pub async fn scan_local(config: &DiscoveryConfig) -> Vec<ServerInfo> {
     let mut servers = Vec::new();
 
-    // Phase 1: Check server-hint files (fast, no network)
     for path in hint_file_paths() {
         if let Ok(url) = tokio::fs::read_to_string(&path).await {
-            let url = url.trim().to_string();
+            let url = url.trim().to_owned();
             if !url.is_empty() {
                 if let Some(info) = probe_server(&url, DiscoverySource::ServerHint, config).await {
                     servers.push(info);
@@ -21,15 +20,15 @@ pub async fn scan_local(config: &DiscoveryConfig) -> Vec<ServerInfo> {
         }
     }
 
-    // Phase 2: Port scan localhost range (parallel probes)
     let (lo, hi) = config.port_range;
-    let known_ports: std::collections::HashSet<String> = servers.iter().map(|s| s.url.clone()).collect();
+    let known_ports: std::collections::HashSet<String> =
+        servers.iter().map(|s| s.url.clone()).collect();
     let mut handles = Vec::new();
 
     for port in lo..=hi {
         let url = format!("http://localhost:{port}");
         if known_ports.contains(&url) {
-            continue; // Already found via hint file
+            continue;
         }
         let timeout = config.probe_timeout_ms;
         handles.push(tokio::spawn(async move {
@@ -54,7 +53,7 @@ pub async fn scan_local(config: &DiscoveryConfig) -> Vec<ServerInfo> {
     servers
 }
 
-/// Probe a server URL for Genesis/OpenCode health endpoint.
+/// Probe a server URL for a Genesis/OpenCode health endpoint.
 pub(crate) async fn probe_server(
     url: &str,
     source: DiscoverySource,
@@ -69,7 +68,7 @@ pub(crate) async fn probe_server(
     let start = Instant::now();
 
     let resp = client.get(&health_url).send().await.ok()?;
-    let latency = start.elapsed().as_millis() as u64;
+    let latency = u64::try_from(start.elapsed().as_millis()).unwrap_or(0);
 
     if !resp.status().is_success() {
         return None;
@@ -77,16 +76,21 @@ pub(crate) async fn probe_server(
 
     let body: serde_json::Value = resp.json().await.ok()?;
 
-    // Extract server info from health response
     Some(ServerInfo {
-        url: url.trim_end_matches('/').to_string(),
-        project_dir: body.get("directory").and_then(|v| v.as_str()).map(String::from),
+        url: url.trim_end_matches('/').to_owned(),
+        project_dir: body
+            .get("directory")
+            .and_then(|v| v.as_str())
+            .map(String::from),
         project_name: body
             .get("directory")
             .and_then(|v| v.as_str())
             .and_then(|d| d.rsplit('/').next())
             .map(String::from),
-        version: body.get("version").and_then(|v| v.as_str()).map(String::from),
+        version: body
+            .get("version")
+            .and_then(|v| v.as_str())
+            .map(String::from),
         source,
         latency_ms: Some(latency),
         alive: true,
@@ -110,9 +114,7 @@ fn local_state_dir() -> Option<PathBuf> {
     std::env::var("XDG_STATE_HOME")
         .ok()
         .map(PathBuf::from)
-        .or_else(|| {
-            home_dir().map(|h| h.join(".local/state"))
-        })
+        .or_else(|| home_dir().map(|h| h.join(".local/state")))
 }
 
 fn home_dir() -> Option<PathBuf> {

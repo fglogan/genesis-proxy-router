@@ -1,15 +1,14 @@
-//! Tailscale peer discovery — `tailscale status --json` → probe known ports.
+//! Tailscale peer discovery — `tailscale status --json` -> probe known ports.
 //!
 //! Requires `discover.tailscale = true` in config (opt-in with explicit permission).
 
-use crate::{DiscoveryConfig, DiscoverySource, ServerInfo};
 use crate::discover::local::probe_server;
-use std::time::Duration;
+use crate::{DiscoveryConfig, DiscoverySource, ServerInfo};
 
 /// Scan Tailscale peers for Genesis servers.
 ///
-/// Runs `tailscale status --json`, iterates online peers, probes each
-/// on the configured port range for a Genesis health endpoint.
+/// Runs `tailscale status --json`, iterates online peers, and probes each
+/// on a few well-known ports for a Genesis health endpoint.
 pub async fn scan_tailscale(config: &DiscoveryConfig) -> Vec<ServerInfo> {
     let peers = match get_tailscale_peers().await {
         Ok(p) => p,
@@ -20,9 +19,8 @@ pub async fn scan_tailscale(config: &DiscoveryConfig) -> Vec<ServerInfo> {
     };
 
     let mut handles = Vec::new();
-    let (lo, hi) = config.port_range;
-    // Only probe a few well-known ports per peer to avoid flooding
-    let probe_ports = [lo, lo + 1, lo + 2];
+    let lo = config.port_range.0;
+    let probe_ports: [u16; 3] = [lo, lo.saturating_add(1), lo.saturating_add(2)];
 
     for peer in &peers {
         for &port in &probe_ports {
@@ -57,7 +55,6 @@ struct TailscalePeer {
     dns_name: String,
     #[allow(dead_code)]
     hostname: String,
-    online: bool,
 }
 
 /// Parse `tailscale status --json` output.
@@ -81,18 +78,24 @@ async fn get_tailscale_peers() -> Result<Vec<TailscalePeer>, String> {
     let peers = json
         .get("Peer")
         .and_then(|p| p.as_object())
-        .map(|peers| {
-            peers
+        .map(|peer_map| {
+            peer_map
                 .values()
                 .filter_map(|peer| {
-                    let dns_name = peer.get("DNSName")?.as_str()?.trim_end_matches('.').to_string();
-                    let hostname = peer.get("HostName")?.as_str()?.to_string();
-                    let online = peer.get("Online").and_then(|v| v.as_bool()).unwrap_or(false);
-                    if online {
-                        Some(TailscalePeer { dns_name, hostname, online })
-                    } else {
-                        None
-                    }
+                    let dns_name = peer
+                        .get("DNSName")?
+                        .as_str()?
+                        .trim_end_matches('.')
+                        .to_owned();
+                    let hostname = peer.get("HostName")?.as_str()?.to_owned();
+                    let online = peer
+                        .get("Online")
+                        .and_then(serde_json::Value::as_bool)
+                        .unwrap_or(false);
+                    online.then_some(TailscalePeer {
+                        dns_name,
+                        hostname,
+                    })
                 })
                 .collect()
         })

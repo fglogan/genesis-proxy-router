@@ -1,28 +1,29 @@
-//! Adapter layer: Genesis StreamChunk ↔ OpenAI SSE/JSON format.
+//! Adapter layer: Genesis `StreamChunk` to OpenAI SSE/JSON format.
 //!
 //! This is the core translation layer. Genesis providers emit `StreamChunk`
 //! variants; clients expect OpenAI `chat.completion.chunk` SSE events.
 
 use async_stream::stream;
 use axum::response::sse::Event as SseEvent;
-use futures_util::{Stream, StreamExt};
-use crate::stream::StreamChunk;
+use futures_util::{Stream, StreamExt as _};
 use serde_json::{Value, json};
 use std::convert::Infallible;
 
-/// Convert a Genesis ChunkStream to OpenAI-format SSE events.
+use crate::stream::StreamChunk;
+
+/// Convert a Genesis `ChunkStream` to OpenAI-format SSE events.
 ///
 /// Maps:
-/// - `StreamChunk::TextDelta` → `choices[0].delta.content`
-/// - `StreamChunk::ToolCall` → `choices[0].delta.tool_calls`
-/// - `StreamChunk::ReasoningDelta` → skipped (not in OpenAI spec)
-/// - `StreamChunk::Usage` → final chunk with `usage` field
-/// - `StreamChunk::Finish` → `[DONE]`
+/// - `StreamChunk::TextDelta` -> `choices[0].delta.content`
+/// - `StreamChunk::ToolCall` -> `choices[0].delta.tool_calls`
+/// - `StreamChunk::ReasoningDelta` -> skipped (not in OpenAI spec)
+/// - `StreamChunk::Usage` -> final chunk with `usage` field
+/// - `StreamChunk::Finish` -> `[DONE]`
 pub fn stream_to_openai_sse(
     chunk_stream: crate::stream::ChunkStream,
     model: &str,
 ) -> impl Stream<Item = Result<SseEvent, Infallible>> + Send + 'static {
-    let model = model.to_string();
+    let model = model.to_owned();
     let chunk_id = format!("chatcmpl-{}", crate::util::generate_id());
 
     stream! {
@@ -36,7 +37,7 @@ pub fn stream_to_openai_sse(
                 }
                 StreamChunk::ToolCall { id, name, arguments } => {
                     let idx = tool_call_index;
-                    tool_call_index += 1;
+                    tool_call_index = tool_call_index.saturating_add(1);
                     json!({
                         "tool_calls": [{
                             "index": idx,
@@ -47,7 +48,6 @@ pub fn stream_to_openai_sse(
                     })
                 }
                 StreamChunk::ReasoningDelta(_) => {
-                    // OpenAI spec doesn't have reasoning in SSE — skip.
                     continue;
                 }
                 StreamChunk::Usage(usage) => {
@@ -59,11 +59,11 @@ pub fn stream_to_openai_sse(
                         "usage": {
                             "prompt_tokens": usage.input,
                             "completion_tokens": usage.output,
-                            "total_tokens": usage.total.unwrap_or(usage.input + usage.output),
+                            "total_tokens": usage.total.unwrap_or_else(|| usage.input.saturating_add(usage.output)),
                         }
                     });
-                    if let Ok(json) = serde_json::to_string(&data) {
-                        yield Ok::<SseEvent, Infallible>(SseEvent::default().data(json));
+                    if let Ok(json_str) = serde_json::to_string(&data) {
+                        yield Ok::<SseEvent, Infallible>(SseEvent::default().data(json_str));
                     }
                     continue;
                 }
@@ -74,13 +74,13 @@ pub fn stream_to_openai_sse(
                 StreamChunk::Error(e) => {
                     let data = json!({
                         "error": {
-                            "message": e.to_string(),
+                            "message": e,
                             "type": "server_error",
                             "code": "upstream_error"
                         }
                     });
-                    if let Ok(json) = serde_json::to_string(&data) {
-                        yield Ok::<SseEvent, Infallible>(SseEvent::default().data(json));
+                    if let Ok(json_str) = serde_json::to_string(&data) {
+                        yield Ok::<SseEvent, Infallible>(SseEvent::default().data(json_str));
                     }
                     break;
                 }
@@ -97,8 +97,8 @@ pub fn stream_to_openai_sse(
                 }]
             });
 
-            if let Ok(json) = serde_json::to_string(&data) {
-                yield Ok::<SseEvent, Infallible>(SseEvent::default().data(json));
+            if let Ok(json_str) = serde_json::to_string(&data) {
+                yield Ok::<SseEvent, Infallible>(SseEvent::default().data(json_str));
             }
         }
     }
@@ -111,21 +111,25 @@ pub async fn collect_to_openai_response(
 ) -> Value {
     let mut content = String::new();
     let mut tool_calls: Vec<Value> = Vec::new();
-    let mut usage_input = 0u64;
-    let mut usage_output = 0u64;
-    let mut finish_reason = "stop".to_string();
+    let mut usage_input = 0_u64;
+    let mut usage_output = 0_u64;
+    let mut finish_reason = String::from("stop");
 
     let mut chunk_stream = chunk_stream;
     while let Some(chunk) = chunk_stream.next().await {
         match chunk {
             StreamChunk::TextDelta(text) => content.push_str(&text),
-            StreamChunk::ToolCall { id, name, arguments } => {
+            StreamChunk::ToolCall {
+                id,
+                name,
+                arguments,
+            } => {
                 tool_calls.push(json!({
                     "id": id,
                     "type": "function",
                     "function": { "name": name, "arguments": arguments }
                 }));
-                finish_reason = "tool_calls".to_string();
+                finish_reason = String::from("tool_calls");
             }
             StreamChunk::Usage(u) => {
                 usage_input = u.input;
@@ -141,10 +145,15 @@ pub async fn collect_to_openai_response(
         }
     }
 
-    let mut message = json!({ "role": "assistant", "content": content });
-    if !tool_calls.is_empty() {
-        message["tool_calls"] = json!(tool_calls);
-    }
+    let message = if tool_calls.is_empty() {
+        json!({ "role": "assistant", "content": content })
+    } else {
+        json!({
+            "role": "assistant",
+            "content": content,
+            "tool_calls": tool_calls,
+        })
+    };
 
     json!({
         "id": format!("chatcmpl-{}", crate::util::generate_id()),
@@ -158,7 +167,7 @@ pub async fn collect_to_openai_response(
         "usage": {
             "prompt_tokens": usage_input,
             "completion_tokens": usage_output,
-            "total_tokens": usage_input + usage_output,
+            "total_tokens": usage_input.saturating_add(usage_output),
         }
     })
 }

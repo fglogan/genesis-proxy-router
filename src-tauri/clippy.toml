@@ -1,0 +1,10 @@
+# src-tauri/clippy.toml
+# Per-crate lint overrides for the Tauri dashboard app.
+# These override workspace lints for this crate only.
+
+# Allow library hygiene lints that are too strict for app glue code
+const_fn = "allow"
+missing_const_for_fn = "allow"
+pub_without_shorthand = "allow"
+must_use_candidate = "allow"
+missing_inline_in_public_items = "allow"

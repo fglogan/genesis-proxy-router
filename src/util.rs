@@ -3,6 +3,8 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Generate a simple unique ID for response objects.
+#[inline]
+#[must_use]
 pub fn generate_id() -> String {
     let ts = SystemTime::now()
         .duration_since(UNIX_EPOCH)

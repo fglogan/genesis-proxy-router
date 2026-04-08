@@ -1,7 +1,7 @@
 //! Server discovery across local, LAN, and Tailscale networks.
 
-pub mod local;
 pub mod lan;
+pub mod local;
 pub mod tailscale;
 
 use crate::{DiscoveryConfig, ServerInfo};
@@ -22,7 +22,6 @@ pub async fn scan(config: &DiscoveryConfig) -> Vec<ServerInfo> {
         servers.extend(tailscale::scan_tailscale(config).await);
     }
 
-    // Deduplicate by URL
     servers.sort_by(|a, b| a.latency_ms.cmp(&b.latency_ms));
     servers.dedup_by(|a, b| a.url == b.url);
     servers

@@ -2,61 +2,64 @@
 
 use serde::{Deserialize, Serialize};
 
-// ---------------------------------------------------------------------------
-// Discovery types
-// ---------------------------------------------------------------------------
-
-/// A discovered Genesis/OpenCode server instance.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct ServerInfo {
-    /// Full URL (e.g., "http://localhost:39175" or "http://imac.tail1234.ts.net:39175")
+    /// Full URL (e.g., `http://localhost:39175`).
+    #[doc = "Full URL to the server endpoint."]
     pub url: String,
-    /// Project directory the server is serving
+    /// Project directory the server is serving.
+    #[doc = "Project directory the server is serving."]
     pub project_dir: Option<String>,
-    /// Project name (last path component of project_dir)
+    /// Project name (last path component of `project_dir`).
+    #[doc = "Project name derived from the directory path."]
     pub project_name: Option<String>,
-    /// Server version (from /health endpoint)
+    /// Server version (from `/health` endpoint).
+    #[doc = "Server version reported by the health endpoint."]
     pub version: Option<String>,
-    /// How the server was discovered
+    /// How the server was discovered.
+    #[doc = "Discovery source that found this server."]
     pub source: DiscoverySource,
-    /// Latency to health endpoint in milliseconds
+    /// Latency to health endpoint in milliseconds.
+    #[doc = "Round-trip latency to the health endpoint in milliseconds."]
     pub latency_ms: Option<u64>,
-    /// Whether the server responded to probe
+    /// Whether the server responded to probe.
+    #[doc = "Whether the server responded to the health probe."]
     pub alive: bool,
 }
 
-/// How a server was discovered.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[non_exhaustive]
 pub enum DiscoverySource {
-    /// server-hint file on local filesystem
+    /// Server-hint file on local filesystem.
     ServerHint,
-    /// Port scan on localhost
+    /// Port scan on localhost.
     PortScan,
-    /// mDNS/Bonjour on LAN
+    /// mDNS/Bonjour on LAN.
     Mdns,
-    /// Tailscale peer discovery
+    /// Tailscale peer discovery.
     Tailscale,
-    /// Manually configured URL
+    /// Manually configured URL.
     Manual,
 }
 
-/// Discovery scope configuration.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct DiscoveryConfig {
-    /// Scan localhost (always allowed)
+    /// Scan localhost (always allowed).
     #[serde(default = "default_true")]
     pub local: bool,
-    /// Scan LAN via mDNS (opt-in, requires permission)
+    /// Scan LAN via mDNS (opt-in, requires permission).
     #[serde(default)]
     pub lan: bool,
-    /// Scan Tailscale peers (opt-in, requires permission)
+    /// Scan Tailscale peers (opt-in, requires permission).
     #[serde(default)]
     pub tailscale: bool,
-    /// Port range for scanning
+    /// Port range for scanning.
     #[serde(default = "default_port_range")]
     pub port_range: (u16, u16),
-    /// Probe timeout in milliseconds
+    /// Probe timeout in milliseconds.
     #[serde(default = "default_probe_timeout")]
     pub probe_timeout_ms: u64,
 }
@@ -73,31 +76,40 @@ impl Default for DiscoveryConfig {
     }
 }
 
-fn default_true() -> bool { true }
-fn default_port_range() -> (u16, u16) { (39175, 39687) }
-fn default_probe_timeout() -> u64 { 2000 }
+#[inline]
+#[must_use]
+pub(crate) fn default_true() -> bool {
+    true
+}
 
-// ---------------------------------------------------------------------------
-// Proxy types
-// ---------------------------------------------------------------------------
+#[inline]
+#[must_use]
+const fn default_port_range() -> (u16, u16) {
+    (39_175, 39_687)
+}
 
-/// Gateway/proxy configuration.
+#[inline]
+#[must_use]
+const fn default_probe_timeout() -> u64 {
+    2000
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct GatewayConfig {
-    /// Whether the /v1/* proxy routes are enabled
+    /// Whether the `/v1/*` proxy routes are enabled.
     #[serde(default)]
     pub enabled: bool,
-    /// Require bearer token for proxy access
+    /// Require bearer token for proxy access.
     #[serde(default = "default_true")]
     pub auth_required: bool,
-    /// CORS allowed origins for proxy routes
+    /// CORS allowed origins for proxy routes.
     #[serde(default)]
     pub allowed_origins: Vec<String>,
-    /// Optional bearer token for proxy authentication
-    /// (if not set, uses the server's basic auth)
+    /// Optional bearer token for proxy authentication.
     #[serde(default)]
     pub proxy_token: Option<String>,
-    /// Advertise as this provider name to clients
+    /// Advertise as this provider name to clients.
     #[serde(default = "default_provider_name")]
     pub provider_name: String,
 }
@@ -114,32 +126,42 @@ impl Default for GatewayConfig {
     }
 }
 
-fn default_provider_name() -> String { "genesis-proxy".to_string() }
+#[inline]
+#[must_use]
+fn default_provider_name() -> String {
+    String::from("genesis-proxy")
+}
 
-/// A model exposed through the proxy, with source tracking.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct ProxiedModel {
-    /// Model ID as seen by clients (e.g., "claude-sonnet-4-20250514")
+    /// Model ID as seen by clients (e.g., `claude-sonnet-4-20250514`).
     pub id: String,
-    /// Human-readable name
+    /// Human-readable name.
     pub name: String,
-    /// The upstream provider serving this model
+    /// The upstream provider serving this model.
     pub upstream_provider: String,
-    /// Whether this is a local model (Ollama, MLX) or cloud
+    /// Whether this is a local model (Ollama, MLX) or cloud.
     pub local: bool,
-    /// Context window size
+    /// Context window size.
     pub context_window: u64,
-    /// Capabilities from the model card
+    /// Capabilities from the model card.
     pub capabilities: ProxiedModelCapabilities,
 }
 
-/// Capability flags advertised to clients via /v1/models.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct ProxiedModelCapabilities {
+    /// Supports multi-step reasoning.
     pub reasoning: bool,
+    /// Supports tool/function calling.
     pub tool_calling: bool,
+    /// Supports image/vision input.
     pub vision: bool,
+    /// Supports streaming responses.
     pub streaming: bool,
+    /// Supports JSON mode output.
     pub json_mode: bool,
+    /// Supports function calling (legacy).
     pub function_calling: bool,
 }
